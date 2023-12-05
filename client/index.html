@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat Client</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        background-color: #f0f0f0;
+      }
+      .container {
+        text-align: center;
+        padding: 20px;
+        border: 1px solid #ccc;
+        background-color: white;
+        box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 90%;
+        max-width: 1024px;
+      }
+      button {
+        padding: 10px 20px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        cursor: pointer;
+      }
+      input {
+        padding: 10px;
+        margin: 5px;
+        width: 80%;
+      }
+      p {
+        margin: 10px 0;
+        color: green;
+      }
+      .error {
+        color: red;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Create a New Room</h2>
+      <input type="text" id="newRoomName" placeholder="Room Name" />
+      <input type="text" id="createRoomUsername" placeholder="Username" />
+      <button onclick="createRoom()">Create Room</button>
+      <p id="newRoomId" style="display: none"></p>
+
+      <h2>Join an Existing Room</h2>
+      <input type="text" id="username" placeholder="Username" />
+      <input type="text" id="existingRoomId" placeholder="Room ID" />
+      <button onclick="joinRoom()">Join Room</button>
+      <p id="message" style="display: none"></p>
+
+      <h2>Send a Message</h2>
+      <input type="text" id="messageInput" placeholder="Type your message" />
+      <button onclick="sendMessage()">Send Message</button>
+
+      <div
+        id="messageDisplay"
+        style="
+          width: 80%;
+          height: 100px;
+          overflow: auto;
+          border: 1px solid black;
+          padding: 10px;
+          margin: 5px;
+        "
+      ></div>
+      <div id="userFeedback" style="margin-top: 10px"></div>
+    </div>
+
+    <script>
+      async function createRoom() {
+        const roomName = document.getElementById("newRoomName").value;
+        const username = document.getElementById("createRoomUsername").value;
+        const response = await fetch("http://localhost:3000/createRoom", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ roomName: roomName, username: username }),
+        });
+        const data = await response.json();
+        // prettier-ignore
+        document.getElementById("newRoomId").textContent = `Room ID: ${data.roomId}`;
+        document.getElementById("newRoomId").style.display = "block";
+
+        setUserId(data.userId);
+        setRoomId(data.roomId);
+
+        if (response.status === 200) {
+          updateUserFeedback("Room created successfully!", false);
+        } else {
+          updateUserFeedback("Failed to create room.", true);
+        }
+      }
+
+      async function joinRoom() {
+        const username = document.getElementById("username").value;
+        const roomId = document.getElementById("existingRoomId").value;
+        const response = await fetch("http://localhost:3000/joinRoom", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ username, roomId }),
+        });
+        const data = await response.json();
+        document.getElementById("message").textContent = data.message;
+        document.getElementById("message").style.display = "block";
+        setUserId(data.userId);
+        setRoomId(data.roomId);
+
+        if (response.status === 200) {
+          updateUserFeedback("Joined room successfully!", false);
+        } else {
+          updateUserFeedback("Failed to join room.", true);
+        }
+      }
+
+      function getRoomId() {
+        return localStorage.getItem("roomId");
+      }
+      function setRoomId(roomId) {
+        localStorage.setItem("roomId", roomId);
+      }
+      // Function to save the user ID in local storage
+      function setUserId(userId) {
+        localStorage.setItem("userId", userId);
+      }
+
+      // Function to retrieve the user ID from local storage
+      function getUserId() {
+        return localStorage.getItem("userId");
+      }
+
+      // Function to ping the server every 10 seconds
+      function pingServer() {
+        setInterval(async () => {
+          if (getRoomId() != undefined) {
+            try {
+              const response = await fetch(
+                `http://localhost:3000/getMessages/${getRoomId()}`,
+                {
+                  method: "GET",
+                }
+              );
+
+              if (response.status === 200) {
+                //   updateMessageDisplay(response.data);
+                const data = await response.json();
+                console.log(
+                  "🚀 ~ file: index.html:161 ~ setInterval ~ data:",
+                  data
+                );
+                updateMessageDisplay(data);
+                updateUserFeedback("Server pinged successfully.", false);
+              } else {
+                console.log("Failed to ping the server.");
+              }
+            } catch (error) {
+              console.error(
+                "An error occurred while pinging the server:",
+                error
+              );
+              updateUserFeedback("Failed to ping the server.", true);
+            }
+          }
+        }, 2000); // Ping every 10 seconds (10000 milliseconds)
+      }
+
+      function updateMessageDisplay(newMessages) {
+        console.log(
+          "🚀 ~ file: index.html:178 ~ updateMessageDisplay ~ newMessages:",
+          newMessages
+        );
+        const messageDisplay = document.getElementById("messageDisplay");
+        messageDisplay.innerHTML = ""; // Clear the existing messages
+
+        newMessages.userMessagesArray.map((message) => {
+          const messageElement = document.createElement("p");
+          messageElement.textContent = `${message.username} : ${message.message}`;
+          messageDisplay.appendChild(messageElement);
+        });
+      }
+
+      function updateUserFeedback(message, isError = false) {
+        const userFeedback = document.getElementById("userFeedback");
+        userFeedback.textContent = message;
+        userFeedback.style.color = isError ? "red" : "green";
+      }
+      async function sendMessage() {
+        const roomId = getRoomId(); // Retrieve the saved room ID from local storage
+        const userId = getUserId(); // Retrieve the saved user ID from local storage
+        const messageInput = document.getElementById("messageInput").value;
+
+        if (!roomId || !userId) {
+          updateUserFeedback(
+            "Please join a room and set your user ID first.",
+            true
+          );
+          return;
+        }
+
+        try {
+          const response = await fetch("http://localhost:3000/sendMessage", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ roomId, userId, message: messageInput }),
+          });
+
+          if (response.status === 200) {
+            updateUserFeedback("Message sent successfully!", false);
+            const data = await response.json();
+            const newMessages = data?.messages; // Assuming the server sends back updated messages
+            updateMessageDisplay(newMessages);
+          } else {
+            updateUserFeedback("Failed to send message.", true);
+          }
+        } catch (error) {
+          updateUserFeedback(
+            "An error occurred while sending the message:",
+            true
+          );
+          console.error("An error occurred while sending the message:", error);
+        }
+      }
+
+      // Call the function to start pinging the server
+      pingServer();
+    </script>
+  </body>
+</html>
